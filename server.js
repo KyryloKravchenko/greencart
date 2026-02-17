@@ -21,9 +21,16 @@ await connectDB()
 
 await connectCloudinary()
 
+const normalizeOrigin = (value = '') => value.trim().replace(/\/+$/, '');
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
     .split(',')
-    .map((origin) => origin.trim())
+    .map(normalizeOrigin)
+    .filter(Boolean);
+
+const allowedOriginSuffixes = (process.env.ALLOWED_ORIGIN_SUFFIXES || '')
+    .split(',')
+    .map((suffix) => suffix.trim())
     .filter(Boolean);
 
 app.post('/stripe', express.raw({type: 'application/json'}), stripeWebhooks)
@@ -33,7 +40,12 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        const normalizedOrigin = normalizeOrigin(origin || '');
+        const hasAllowedSuffix = allowedOriginSuffixes.some(
+            (suffix) => normalizedOrigin.endsWith(suffix),
+        );
+
+        if (!origin || allowedOrigins.includes(normalizedOrigin) || hasAllowedSuffix) {
             return callback(null, true);
         }
         return callback(new Error('Not allowed by CORS'));
