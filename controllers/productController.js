@@ -1,6 +1,5 @@
 import {v2 as cloudinary} from "cloudinary"
 import Product from "../models/Product.js"
-import { response } from "express"
 
 
 
@@ -83,3 +82,52 @@ export const deleteProduct = async (req, res) => {
         res.json({ success: false, message: error.message });
     }
 }
+
+// Update Product: /api/product/update/:id
+export const updateProduct = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existingProduct = await Product.findById(id);
+
+        if (!existingProduct) {
+            return res.json({ success: false, message: "Product not found" });
+        }
+
+        let productData = {};
+        if (req.body.productData) {
+            productData = JSON.parse(req.body.productData);
+        }
+
+        const keptImagesRaw = req.body.keptImages ? JSON.parse(req.body.keptImages) : existingProduct.image;
+        const keptImages = Array.isArray(keptImagesRaw) ? keptImagesRaw : [];
+
+        const uploadedImages = await Promise.all(
+            (req.files || []).map(async (item) => {
+                const result = await cloudinary.uploader.upload(item.path, { resource_type: "image" });
+                return result.secure_url;
+            }),
+        );
+
+        const normalizedData = {
+            name: productData.name ?? existingProduct.name,
+            nameUk: productData.nameUk ?? existingProduct.nameUk,
+            description: Array.isArray(productData.description)
+                ? productData.description
+                : existingProduct.description,
+            descriptionUk: Array.isArray(productData.descriptionUk)
+                ? productData.descriptionUk
+                : existingProduct.descriptionUk,
+            category: productData.category ?? existingProduct.category,
+            price: Number(productData.price ?? existingProduct.price),
+            offerPrice: Number(productData.offerPrice ?? existingProduct.offerPrice),
+            image: [...keptImages, ...uploadedImages],
+        };
+
+        await Product.findByIdAndUpdate(id, normalizedData, { new: true });
+
+        return res.json({ success: true, message: "Product updated" });
+    } catch (error) {
+        console.log(error.message);
+        return res.json({ success: false, message: error.message });
+    }
+};
